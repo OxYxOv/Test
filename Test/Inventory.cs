@@ -4,7 +4,7 @@ internal class Inventory
 {
     public const int MaxWeight = 100;
 
-    private readonly List<Item> _items = [];
+    private readonly Dictionary<string, Item> _items = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _sync = new();
     private int _currentWeight;
 
@@ -14,7 +14,8 @@ internal class Inventory
         {
             lock (_sync)
             {
-                return _items.Select(CloneItem).ToList().AsReadOnly();
+                var snapshot = _items.Values.ToArray();
+                return Array.AsReadOnly(snapshot);
             }
         }
     }
@@ -25,20 +26,17 @@ internal class Inventory
 
         lock (_sync)
         {
-            EnsureWeightCanBeAdded(item.Weight);
-
-            var existingIndex = FindIndexByName(item.Name);
-            if (existingIndex >= 0)
+            if (_items.TryGetValue(item.Name, out var existingItem))
             {
-                var existing = _items[existingIndex];
-                _items[existingIndex] = new Item(existing.Name, existing.Weight + item.Weight);
+                var newWeight = checked(existingItem.Weight + item.Weight);
+                var potentialTotalWeight = checked(_currentWeight - existingItem.Weight + newWeight);
+                ApplyItemUpdate(item.Name, newWeight, potentialTotalWeight);
             }
             else
             {
-                _items.Add(CloneItem(item));
+                var potentialTotalWeight = checked(_currentWeight + item.Weight);
+                ApplyItemUpdate(item.Name, item.Weight, potentialTotalWeight);
             }
-
-            _currentWeight += item.Weight;
         }
     }
 
@@ -46,16 +44,22 @@ internal class Inventory
     {
         ArgumentNullException.ThrowIfNull(item);
 
+        return RemoveItemByName(item.Name);
+    }
+
+    public bool RemoveItemByName(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
         lock (_sync)
         {
-            var index = FindIndexByName(item.Name);
-            if (index < 0)
+            if (!_items.TryGetValue(name, out var existingItem))
             {
                 return false;
             }
 
-            _currentWeight -= _items[index].Weight;
-            _items.RemoveAt(index);
+            _currentWeight -= existingItem.Weight;
+            _items.Remove(name);
             return true;
         }
     }
@@ -66,24 +70,26 @@ internal class Inventory
 
         lock (_sync)
         {
-            return _items
+            var matches = _items.Values
                 .Where(i => i.Name.Contains(namePart, StringComparison.OrdinalIgnoreCase))
-                .Select(CloneItem)
-                .ToList()
-                .AsReadOnly();
+                .ToArray();
+
+            return Array.AsReadOnly(matches);
         }
     }
 
-    private int FindIndexByName(string name) =>
-        _items.FindIndex(i => string.Equals(i.Name, name, StringComparison.OrdinalIgnoreCase));
-
-    private void EnsureWeightCanBeAdded(int weight)
+    private void EnsureTotalWeightWithinLimit(int totalWeight)
     {
-        if (_currentWeight + weight > MaxWeight)
+        if (totalWeight > MaxWeight)
         {
             throw new InvalidOperationException($"Cannot exceed max inventory weight of {MaxWeight}.");
         }
     }
 
-    private static Item CloneItem(Item item) => new(item.Name, item.Weight);
+    private void ApplyItemUpdate(string name, int weight, int potentialTotalWeight)
+    {
+        EnsureTotalWeightWithinLimit(potentialTotalWeight);
+        _items[name] = new Item(name, weight);
+        _currentWeight = potentialTotalWeight;
+    }
 }
