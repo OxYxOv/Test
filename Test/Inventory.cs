@@ -82,7 +82,7 @@ internal class Inventory
     {
         if (totalWeight > MaxWeight)
         {
-            throw new InvalidOperationException($"Cannot exceed max inventory weight of {MaxWeight}.");
+            throw new InvalidOperationException($"Не может превышать максимальный вес инвентаря в размере {MaxWeight}.");
         }
     }
 

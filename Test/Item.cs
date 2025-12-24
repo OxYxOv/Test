@@ -7,7 +7,7 @@ internal sealed record Item
         Name = name ?? throw new ArgumentNullException(nameof(name));
         if (weight <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(weight), "Weight must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(weight), "Вес должен быть положительным");
         }
 
         Weight = weight;
